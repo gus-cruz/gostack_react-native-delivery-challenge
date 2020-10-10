@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useLayoutEffect,
 } from 'react';
-import { Image } from 'react-native';
+import { Image, Alert } from 'react-native';
 
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -73,86 +73,76 @@ const FoodDetails: React.FC = () => {
 
   useEffect(() => {
     async function loadFood(): Promise<void> {
-      const response = await api.get<Food>(`foods/${routeParams.id}`);
+      try {
+        const { data } = await api.get<Food>(`/foods/${routeParams.id}`);
 
-      setFood(response.data);
-
-      setExtras(
-        response.data.extras.map(extra => ({
-          ...extra,
-          quantity: 0,
-        })),
-      );
-
-      const { data } = await api.get<Food[]>('favorites');
-      const favorite = data.find(
-        findFavorite => findFavorite.id === routeParams.id,
-      );
-      setIsFavorite(!favorite);
+        setFood(data);
+        setExtras(data.extras.map(ex => ({ ...ex, quantity: 0 })));
+      } catch (error) {
+        Alert.alert('Erro ao carregar prato');
+      }
     }
 
     loadFood();
   }, [routeParams]);
 
   function handleIncrementExtra(id: number): void {
-    const extra = extras.find(findExtra => findExtra.id === id);
-    const newExtras = extras.filter(extraToRemove => extraToRemove.id !== id);
-
-    if (extra) {
-      extra.quantity += 1;
-      setExtras([...newExtras, extra]);
-    }
+    setExtras(
+      extras.map(ex =>
+        ex.id === id ? { ...ex, quantity: ex.quantity + 1 } : ex,
+      ),
+    );
   }
 
   function handleDecrementExtra(id: number): void {
-    const extra = extras.find(findExtra => findExtra.id === id);
-    const newExtras = extras.filter(extraToRemove => extraToRemove.id !== id);
-
-    if (extra) {
-      extra.quantity = extra.quantity === 0 ? 0 : extra.quantity - 1;
-      setExtras([...newExtras, extra]);
-    }
+    setExtras(
+      extras.map(ex =>
+        ex.id === id
+          ? { ...ex, quantity: ex.quantity > 0 ? ex.quantity - 1 : 1 }
+          : ex,
+      ),
+    );
   }
 
   function handleIncrementFood(): void {
-    setFoodQuantity(oldState => oldState + 1);
+    setFoodQuantity(foodQuantity + 1);
   }
 
   function handleDecrementFood(): void {
-    setFoodQuantity(oldState => (oldState > 1 ? oldState - 1 : oldState));
+    setFoodQuantity(foodQuantity > 1 ? foodQuantity - 1 : 1);
   }
 
-  const toggleFavorite = useCallback(async () => {
-    const { data } = await api.get<Food[]>('favorites');
-    const favorite = data.find(findFavorite => findFavorite.id === food.id);
-
-    if (favorite) {
-      await api.delete(`favorite/${food.id}`);
+  const toggleFavorite = useCallback(() => {
+    if (isFavorite) {
+      api.delete(`/favorites/${food.id}`);
     } else {
-      const food2 = food;
-      delete food2.extras;
-      await api.post('favorites', food2);
+      const newFavorite = { ...food };
+      delete newFavorite.extras;
+
+      api.post('/favorites', newFavorite);
     }
+
     setIsFavorite(!isFavorite);
   }, [isFavorite, food]);
 
   const cartTotal = useMemo(() => {
-    const totalExtras = extras.reduce((c: number, extra: Extra) => {
-      c += extra.quantity * extra.value;
-      return c;
-    }, 0);
+    const extrasPrice = extras.reduce(
+      (accumulator, extra) => accumulator + extra.value * extra.quantity,
+      0,
+    );
 
-    return formatValue(totalExtras + food.price * foodQuantity);
+    const foodPrice = food.price * foodQuantity;
+
+    return formatValue(foodPrice + extrasPrice);
   }, [extras, food, foodQuantity]);
 
   async function handleFinishOrder(): Promise<void> {
-    const productId = food.id;
-    delete food.id;
+    const newOrder = { ...food, product_id: food.id };
+    delete newOrder.id;
 
-    await api.post('orders', {
-      ...food,
-      productId,
-    });
+    await api.post('/orders', newOrder);
+
+    navigation.goBack();
   }
 
   // Calculate the correct icon name
@@ -162,6 +152,7 @@ const FoodDetails: React.FC = () => {
   );
 
   useLayoutEffect(() => {
+    // Add the favorite icon on the right of the header bar
     navigation.setOptions({
       headerRight: () => (
         <MaterialIcon

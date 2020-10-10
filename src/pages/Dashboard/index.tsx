@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image, ScrollView } from 'react-native';
+import { Image, ScrollView, Alert } from 'react-native';
 
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
@@ -59,14 +59,23 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     async function loadFoods(): Promise<void> {
-      const response = await api.get<Food[]>('/foods', {
-        params: {
-          name_like: searchValue,
-          category_like: selectedCategory,
-        },
-      });
+      try {
+        const options = {
+          params: {
+            ...(selectedCategory ? { category_like: selectedCategory } : {}),
+            ...(searchValue ? { name_like: searchValue } : {}),
+          },
+        };
+        const { data } = await api.get<Food[]>('/foods', options);
+        const formattedFoods = data.map(food => ({
+          ...food,
+          formattedPrice: formatValue(food.price),
+        }));
 
-      setFoods(response.data);
+        setFoods(formattedFoods);
+      } catch (error) {
+        Alert.alert('Erro ao carregar lista de pratos');
+      }
     }
 
     loadFoods();
@@ -74,19 +83,20 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     async function loadCategories(): Promise<void> {
-      const response = await api.get<Category[]>('categories');
-      setCategories(response.data);
+      try {
+        const { data } = await api.get<Category[]>('/categories');
+        setCategories(data);
+      } catch (error) {
+        Alert.alert('Erro ao carregar categorias');
+      }
     }
 
     loadCategories();
   }, []);
 
   function handleSelectCategory(id: number): void {
-    if (selectedCategory === id) {
-      setSelectedCategory(undefined);
-    } else {
-      setSelectedCategory(id);
-    }
+    setSelectedCategory(selectedCategory === id ? undefined : id);
+    setSearchValue('');
   }
 
   return (
